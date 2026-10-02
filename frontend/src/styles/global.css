@@ -35,3 +35,11 @@ body { margin: 0; background: #f6f8fb; color: #1f2937; }
 .error-text { color: #b42318; }
 .status-legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 0 0 10px; font-size: 12px; color: var(--muted); }
 .legend-item { background: #eef2f7; border-radius: 999px; padding: 2px 10px; }
+.gate-panel { margin-top: 12px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); background: #f8fafc; }
+.gate-panel h3 { margin: 0 0 6px; font-size: 14px; }
+.gate-panel ul { margin: 0; padding-left: 4px; list-style: none; font-size: 13px; }
+.gate-panel p { margin: 6px 0 0; font-size: 13px; }
+.gate-pass { border-color: #12b76a; background: #ecfdf3; }
+.gate-fail { border-color: #f04438; background: #fef3f2; }
+.gate-ok { color: #027a48; margin-right: 4px; }
+.gate-no { color: #b42318; margin-right: 4px; }

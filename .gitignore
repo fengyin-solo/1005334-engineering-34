@@ -85,3 +85,9 @@ desktop.ini
 *.db
 *.pid
 *.seed
+
+# ===== 定稿闸门流水线 =====
+.release-gate/
+# 留档只保留最新一份随仓库走，按批次的历史报告不入库
+release-records/*.json
+!release-records/latest.json

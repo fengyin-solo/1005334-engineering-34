@@ -1,0 +1,44 @@
+name: release-gate
+
+# 定稿闸门：简报定稿（发布）前的流水线关卡。
+# 推主干或发 PR 都要过；不过就挡下合并/部署，错误文件与缺失依赖见构建日志与报告产物。
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 安装依赖（严格按 lockfile）
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+
+      - name: 定稿闸门（依赖校验 → 类型检查 → 构建）
+        run: make gate
+
+      - name: 干净克隆演练（装依赖到构建跑通，路径不写死）
+        run: make clean-clone
+
+      - name: 上传检查留档与构建产物
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-gate-records
+          path: |
+            release-records/
+            frontend/dist/
+          if-no-files-found: ignore
+          retention-days: 30

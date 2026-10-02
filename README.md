@@ -17,8 +17,12 @@
 │   ├── src/data/             模块元数据 / 示例数据 / localStorage 持久化
 │   ├── src/stores/           会话与筛选状态
 │   └── vite.config.ts        dev server 配置（open: false，无 /api 代理）
+├── scripts/                  定稿闸门、回滚、干净克隆演练脚本
+├── release-records/          闸门检查留档（latest.md 随仓库走）
+├── .github/workflows/        CI 上的定稿闸门
+├── Makefile                  gate / rollback / clean-clone 等入口
 ├── .gitignore
-└── docker-compose.yml
+└── docker-compose.yml        frontend 为生产构建（nginx 托管）；--profile dev 起开发服务器
 ```
 
 ## 启动
@@ -37,6 +41,43 @@ npm run dev
 cd frontend
 npm run build
 ```
+
+## 定稿闸门（发布前流水线）
+
+发掘简报「确认定稿」之前必须先过闸门：**依赖安装 → 依赖校验 → 类型检查 → 生产构建**，
+任何一段失败都会挡下定稿，并把出错的文件与缺少的依赖列出来。所有路径都按脚本位置推导，
+不写死工作目录。
+
+```bash
+make gate          # 顺序跑完四个阶段（= node scripts/release-gate.mjs）
+make gate-deps     # 只跑到依赖校验
+make gate-typecheck
+make gate-build
+```
+
+闸门特性：
+
+- **断点续跑**：每个阶段按输入内容（package.json、lockfile、源码、Node 版本）计算指纹并落标记；
+  构建中断后再跑，只补没跑完的阶段，已经通过且输入未变的不再重跑。`make gate-reset` 可清空状态。
+- **干净克隆可复现**：`make clean-clone` 会在 `mktemp -d` 临时目录里克隆仓库、`npm ci`
+  装依赖、跑闸门到构建产物，验证从零开始能跑通；安装严格按 `frontend/package-lock.json`。
+- **构建幂等**：build 阶段会清空 `dist` 连构建两次并比对文件清单与哈希，
+  缓存清理后反复装载不会产生重复或漂移产物。
+- **留档**：每次运行写 `release-records/latest.md`（人读）和 `.release-gate/runs/*.json`
+  （全量历史）；CI 会把留档与 dist 作为 artifact 上传。
+- **回滚**：通过闸门时会快照本次产物，`make rollback` 可把 `frontend/dist`
+  恢复为最近一次通过的构建，并清空闸门状态强制下次完整复检；
+  代码层回退用 `git revert <定稿提交>`。
+
+应用内的定稿门禁（`src/data/release-gate.ts`）在简报页点「确认定稿」时触发，
+校验简报编号、涉及探方（须在探方登记中存在）、校核结论、校核意见数与数据依赖；
+不通过就挡下定稿，通过则把简报置为「已定稿」并在「探方验收」模块生成一条
+`简报定稿验收` 待办（同一简报重复定稿幂等，不会重复生成）。每次检查结果都留档，
+简报页可点「导出闸门检查留档」下载（localStorage 键
+`archaeology-field:gate-reports`）。
+
+CI（`.github/workflows/release-gate.yml`）在推 main 或发 PR 时执行同样的闸门与干净克隆演练，
+失败即挡下合并/部署。
 
 ## 业务模块
 

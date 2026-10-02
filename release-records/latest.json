@@ -1,0 +1,50 @@
+{
+  "id": "2026-10-02T09-36-38-426Z",
+  "startedAt": "2026-10-02T09:36:38.426Z",
+  "node": "v20.20.2",
+  "cwd": "/workspace",
+  "targetStage": "build",
+  "passed": true,
+  "stages": [
+    {
+      "stage": "install",
+      "ok": true,
+      "skipped": true,
+      "durationMs": 0,
+      "errors": [],
+      "logs": [],
+      "note": "输入未变，沿用上轮结果",
+      "fingerprint": "d021c159f0ade29577007b9e1b1c1f79e2fbdcd1"
+    },
+    {
+      "stage": "deps",
+      "ok": true,
+      "skipped": true,
+      "durationMs": 0,
+      "errors": [],
+      "logs": [],
+      "note": "输入未变，沿用上轮结果",
+      "fingerprint": "088ce3ca7c893f11a5e30cf9b5be21d4c2070cfe"
+    },
+    {
+      "stage": "typecheck",
+      "ok": true,
+      "skipped": true,
+      "durationMs": 0,
+      "errors": [],
+      "logs": [],
+      "note": "输入未变，沿用上轮结果",
+      "fingerprint": "60903536b24111c4aff180dd7800d1d02ae73ddd"
+    },
+    {
+      "stage": "build",
+      "ok": true,
+      "skipped": true,
+      "durationMs": 0,
+      "errors": [],
+      "logs": [],
+      "note": "输入未变，沿用上轮结果",
+      "fingerprint": "7e686475436a347392ed33b11a153173d9e9760f"
+    }
+  ]
+}
