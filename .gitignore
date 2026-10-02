@@ -85,3 +85,8 @@ desktop.ini
 *.db
 *.pid
 *.seed
+
+# ===== 定稿前检查流水线 =====
+.pipeline/
+pipeline-reports/
+frontend/public/pipeline-status.json

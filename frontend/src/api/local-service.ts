@@ -5,6 +5,19 @@ import type { ActionResult, EntryRow, ModuleMeta, OverviewResult, PageResult } f
 // 会写进数据的「往回走」动作：命中就把这条记录标成异常态，看板上能一眼看出来。
 const NEGATIVE_ACTIONS = ['撤销', '作废', '拒绝', '驳回', '停用', '忽略', '下线', '回滚']
 
+// 定稿留档：每次简报定稿追加一条，键名与业务数据分开，重置模块不会清掉留档。
+const FINALIZATION_ARCHIVE_KEY = 'archaeology-field:finalization-archive'
+
+export type FinalizationArchiveEntry = {
+  archivedAt: string
+  briefingId: number
+  briefingNo: string
+  trenches: string
+  conclusion: string
+  acceptanceId: number
+  acceptanceNo: string
+}
+
 export function moduleMeta(key: string): ModuleMeta {
   const meta = MODULE_BY_KEY.get(key)
   if (!meta) {
@@ -53,7 +66,70 @@ export function runAction(key: string, id: number, action: string): ActionResult
   const next = [...rows]
   next[index] = updated
   saveRows(key, next)
-  return { ok: true, message: `${meta.entity}已${action}，当前状态「${target}」` }
+  let extra = ''
+  if (key === 'briefing' && action === '确认定稿') {
+    extra = finalizeBriefing(updated)
+  }
+  return { ok: true, message: `${meta.entity}已${action}，当前状态「${target}」${extra}` }
+}
+
+/**
+ * 简报定稿的后续动作：把定稿结果落成一条「待验收」的探方验收单（验收待办），
+ * 并把这次定稿的关键信息追加到留档里。
+ */
+function finalizeBriefing(briefing: EntryRow): string {
+  const acceptanceRows = listRows('acceptance')
+  const nextId = acceptanceRows.reduce((max, row) => Math.max(max, Number(row.id) || 0), 0) + 1
+  const acceptanceNo = `ACCE-${String(nextId).padStart(4, '0')}`
+  const today = new Date().toISOString().slice(0, 10)
+  const entry: EntryRow = {
+    id: nextId,
+    status: '待验收',
+    pending: true,
+    abnormal: false,
+    验收单号: acceptanceNo,
+    验收探方: String(briefing['涉及探方'] ?? ''),
+    验收类别: '简报定稿复核',
+    验收人: '待指派',
+    验收日期: today,
+    遗留问题数: 0,
+    验收结论: `简报${String(briefing['简报编号'] ?? '')}已定稿，待验收`,
+    验收状态: '待验收',
+  }
+  saveRows('acceptance', [...acceptanceRows, entry])
+  archiveFinalization(briefing, entry)
+  return `；定稿结果已转入探方验收待办（${acceptanceNo}），本次检查结果已留档`
+}
+
+function readFinalizationArchive(): FinalizationArchiveEntry[] {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return []
+  }
+  try {
+    return JSON.parse(window.localStorage.getItem(FINALIZATION_ARCHIVE_KEY) ?? '[]') as FinalizationArchiveEntry[]
+  } catch {
+    return []
+  }
+}
+
+export function listFinalizationArchive(): FinalizationArchiveEntry[] {
+  return readFinalizationArchive()
+}
+
+function archiveFinalization(briefing: EntryRow, acceptance: EntryRow): void {
+  const entry: FinalizationArchiveEntry = {
+    archivedAt: new Date().toISOString(),
+    briefingId: Number(briefing.id),
+    briefingNo: String(briefing['简报编号'] ?? ''),
+    trenches: String(briefing['涉及探方'] ?? ''),
+    conclusion: String(briefing['校核结论'] ?? ''),
+    acceptanceId: Number(acceptance.id),
+    acceptanceNo: String(acceptance['验收单号'] ?? ''),
+  }
+  if (typeof window !== 'undefined' && window.localStorage) {
+    const next = [...readFinalizationArchive(), entry]
+    window.localStorage.setItem(FINALIZATION_ARCHIVE_KEY, JSON.stringify(next))
+  }
 }
 
 export function resetModule(key: string): PageResult {

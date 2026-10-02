@@ -14,9 +14,12 @@
 ├── frontend/                 Vue 3 + Vite + TypeScript 前端（唯一运行单元）
 │   ├── src/views/            每个业务模块一个页面
 │   ├── src/api/local-service.ts   本地数据服务：列表、筛选、动作流转、导出
+│   ├── src/api/pipeline-status.ts 读取定稿前检查结果（public/pipeline-status.json）
 │   ├── src/data/             模块元数据 / 示例数据 / localStorage 持久化
 │   ├── src/stores/           会话与筛选状态
 │   └── vite.config.ts        dev server 配置（open: false，无 /api 代理）
+├── scripts/finalization-pipeline.mjs   定稿前检查流水线（依赖校验 → 类型检查 → 构建）
+├── Makefile                  install / dev / build / pipeline / rollback 等入口
 ├── .gitignore
 └── docker-compose.yml
 ```
@@ -37,6 +40,33 @@ npm run dev
 cd frontend
 npm run build
 ```
+
+## 定稿前检查流水线
+
+简报「确认定稿」之前必须先过检查：**依赖校验 → 类型检查 → 构建**，任一阶段失败就挡下定稿。
+
+```bash
+make pipeline          # 跑检查（中断后重跑会自动续上没跑完的阶段，已通过的不重跑）
+make pipeline-force    # 无视断点状态，全量重跑
+make clean             # 清构建缓存与产物（frontend/dist、node_modules/.vite）
+make rollback          # 回滚到上一版构建产物
+```
+
+- **挡下定稿**：失败时报告列出出错的文件（解析 vue-tsc 输出）和缺失的依赖
+  （`npm ls` 校验 + 源码裸导入比对 package.json）。简报页读取
+  `frontend/public/pipeline-status.json`，未通过时「确认定稿」直接挡下并亮出明细。
+- **回滚策略**：构建前自动把现有 `frontend/dist` 备份到 `.pipeline/rollback/dist`，
+  构建失败自动恢复；事后可用 `make rollback` 手动回滚到上一版产物；简报数据侧用
+  「退回修改」动作回退。
+- **断点续跑**：阶段状态与输入指纹写在 `.pipeline/state.json`（原子写入），构建中断后
+  重跑只补没跑完的阶段；`node scripts/finalization-pipeline.mjs clean` 可清掉状态全量重跑。
+- **反复装载不产生重复产物**：依赖用 `npm ci`（先清 `node_modules` 再按
+  `frontend/package-lock.json` 装），构建由 vite 先清空 `dist` 再产出（`emptyOutDir`）。
+- **留档**：每次运行把报告归档到 `pipeline-reports/`（JSON + Markdown，`latest.json`
+  指向最近一次）。定稿成功后，结果自动落成一条「待验收」的探方验收单（验收待办），
+  并在简报页「定稿留档」里可查。
+- **干净克隆验证**：`git clone` 后执行 `make pipeline` 即可从装依赖到构建一次跑通，
+  脚本路径全部相对仓库根推导，不写死。
 
 ## 业务模块
 
@@ -68,4 +98,6 @@ npm run build
 - 字段、状态、动作与流转目标集中在 `frontend/src/data/modules.ts`；示例数据在
   `frontend/src/data/seed.ts`。
 - 状态流转只允许在 `local-service.ts` 里改，页面组件不做业务判断。
-- 想回到初始数据：清掉浏览器里 `archaeology-field:entries` 这一项，或调用 `resetModule(模块)`。
+- 简报「确认定稿」由定稿前检查流水线闸口把关（见上节），定稿成功才生成验收待办并留档。
+- 想回到初始数据：清掉浏览器里 `archaeology-field:entries` 这一项，或调用 `resetModule(模块)`；
+  定稿留档存在 `archaeology-field:finalization-archive`，不受模块重置影响。

@@ -24,6 +24,27 @@
       </span>
     </p>
 
+    <section class="pipeline-banner" :class="pipelinePassed ? 'passed' : 'blocked'">
+      <template v-if="pipelineStatus">
+        <p class="pipeline-line">
+          定稿前检查：{{ pipelineStatus.result === 'passed' ? '已通过' : '未通过，定稿已挡下' }}
+          （{{ pipelineStatus.finishedAt }}<template v-if="pipelineStatus.failedStage">，失败阶段：{{ pipelineStatus.failedStage }}</template>）
+        </p>
+        <template v-if="pipelineStatus.result !== 'passed'">
+          <ul v-if="pipelineStatus.errorFiles.length" class="pipeline-list">
+            <li v-for="file in pipelineStatus.errorFiles" :key="file">出错文件：{{ file }}</li>
+          </ul>
+          <ul v-if="pipelineStatus.missingDeps.length" class="pipeline-list">
+            <li v-for="dep in pipelineStatus.missingDeps" :key="dep">缺失依赖：{{ dep }}</li>
+          </ul>
+        </template>
+        <p class="pipeline-line muted">回滚策略：{{ pipelineStatus.rollbackHint }}</p>
+      </template>
+      <p v-else class="pipeline-line">
+        定稿前检查尚未运行：先执行 <code>make pipeline</code>（依赖校验 → 类型检查 → 构建），通过后「确认定稿」才会放行。
+      </p>
+    </section>
+
     <form class="filter-bar" @submit.prevent="reload">
       <label v-for="field in filterFields" :key="field" class="filter-item">
         <span>{{ field }}</span>
@@ -67,6 +88,30 @@
       <span>共 {{ total }} 条简报校核记录</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
     </footer>
+
+    <section v-if="archive.length" class="archive-section">
+      <h3 class="archive-title">定稿留档</h3>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>留档时间</th>
+            <th>简报编号</th>
+            <th>涉及探方</th>
+            <th>校核结论</th>
+            <th>验收待办</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in archive" :key="`${item.briefingId}-${item.archivedAt}`">
+            <td>{{ item.archivedAt }}</td>
+            <td>{{ item.briefingNo }}</td>
+            <td>{{ item.trenches }}</td>
+            <td>{{ item.conclusion }}</td>
+            <td>{{ item.acceptanceNo }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
   </section>
 </template>
 
@@ -76,9 +121,12 @@ import { computed, onMounted, ref } from 'vue'
 import {
   downloadEntries,
   listEntries,
+  listFinalizationArchive,
   moduleMeta,
   runAction as applyAction,
+  type FinalizationArchiveEntry,
 } from '@/api/local-service'
+import { loadPipelineStatus, type PipelineStatus } from '@/api/pipeline-status'
 import type { EntryRow } from '@/data/types'
 
 const meta = moduleMeta('briefing')
@@ -91,6 +139,8 @@ const rows = ref<EntryRow[]>([])
 const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
+const pipelineStatus = ref<PipelineStatus | null>(null)
+const archive = ref<FinalizationArchiveEntry[]>([])
 const filterFields = columns.slice(0, 3)
 const statusSummary = computed(() =>
   statuses.map((status: string) => ({
@@ -98,6 +148,7 @@ const statusSummary = computed(() =>
     count: rows.value.filter((row) => String(row.status) === status).length,
   })),
 )
+const pipelinePassed = computed(() => pipelineStatus.value?.result === 'passed')
 
 function resetFilters() {
   filters.value = {}
@@ -112,12 +163,42 @@ function openCreate() {
   errorMessage.value = '发掘简报登记入口尚未接入审批流'
 }
 
+/** 定稿闸口：检查没跑或未通过就挡下，把出错文件、缺失依赖和回滚策略摆出来。 */
+function finalizeBlockReason(): string {
+  const status = pipelineStatus.value
+  if (!status) {
+    return '定稿前检查尚未运行，请先执行 make pipeline，通过后再定稿'
+  }
+  if (status.result !== 'passed') {
+    const parts = [`定稿前检查未通过（失败阶段：${status.failedStage ?? '未知'}），定稿已挡下`]
+    if (status.errorFiles.length) {
+      parts.push(`出错文件：${status.errorFiles.join('、')}`)
+    }
+    if (status.missingDeps.length) {
+      parts.push(`缺失依赖：${status.missingDeps.join('、')}`)
+    }
+    parts.push(`回滚策略：${status.rollbackHint}`)
+    return parts.join('；')
+  }
+  return ''
+}
+
 function runAction(action: string, row: EntryRow) {
   errorMessage.value = ''
+  if (action === '确认定稿') {
+    const blocked = finalizeBlockReason()
+    if (blocked) {
+      errorMessage.value = blocked
+      return
+    }
+  }
   const result = applyAction(meta.key, Number(row.id), action)
   if (!result.ok) {
     errorMessage.value = result.message
     return
+  }
+  if (action === '确认定稿') {
+    archive.value = listFinalizationArchive()
   }
   reload()
 }
@@ -133,5 +214,9 @@ function reload() {
   }
 }
 
-onMounted(reload)
+onMounted(async () => {
+  reload()
+  archive.value = listFinalizationArchive()
+  pipelineStatus.value = await loadPipelineStatus()
+})
 </script>

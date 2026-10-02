@@ -20,5 +20,7 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
+    // 每次构建先清空 dist 再产出：缓存清理后反复构建不会留下重复/残留产物
+    emptyOutDir: true,
   },
 })
